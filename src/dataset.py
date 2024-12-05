@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-
+import time 
 from os.path import join
 from os import listdir
 from os import path
@@ -24,6 +24,8 @@ import logging
 import json
 from src import ops
 import random
+from all_utils.utils import timeit
+
 
 
 class Data(Dataset):
@@ -57,7 +59,7 @@ class Data(Dataset):
     assert (input_size % 2 == 0)
     self.imgfiles = imgfiles
     self.input_size = input_size
-    self.additional_data_num = data_num - 1
+    self.additional_data_num = data_num - 1 ## additional image 
     self.image_size = [384, 256]  # width, height
     self.load_hist = load_hist  # load histogram if exists
     self.mode = mode
@@ -72,6 +74,146 @@ class Data(Dataset):
 
     return len(self.imgfiles)
 
+  # def __getitem__(self, i):
+  #   """ Gets next data in the dataloader.
+
+  #   Args:
+  #     i: index of file in the dataloader.
+
+  #   Returns:
+  #     A dictionary of the following keys:
+  #     - image_rgb:
+  #     - file_name: filename (without the full path).
+  #     - histogram: input histogram.
+  #     - model_input_histograms: input histogram and the additional histograms
+  #         to be fed to C5 network.
+  #     - gt_ill: ground-truth illuminant color. If the dataloader's 'mode'
+  #        variable was  set to 'testing' and the ground-truth illuminant
+  #        information does not exist, it will contain an empty tensor.
+  #   """
+
+  #   img_file = self.imgfiles[i]
+
+  #   in_img = ops.read_image(img_file)
+  #   in_img = ops.resize_image(in_img, self.image_size)
+
+  #   rgb_img = ops.to_tensor(in_img)  # for visualization
+
+  #   # gets the ground-truth illuminant color
+  #   with open(path.splitext(img_file)[
+  #               0] + '_metadata.json', 'r') as metadata_file:
+  #     metadata = json.load(metadata_file)
+
+  #   if self.mode == 'training':
+  #     assert ['illuminant_color_raw' in metadata.keys() or 'gt_ill' in
+  #             metadata.keys()]
+  #   if 'illuminant_color_raw' in metadata.keys():
+  #     gt_ill = np.array(metadata['illuminant_color_raw'])
+  #     gt_ill = torch.from_numpy(gt_ill)
+  #   elif 'gt_ill' in metadata.keys():
+  #     gt_ill = np.array(metadata['gt_ill'])
+  #     gt_ill = torch.from_numpy(gt_ill)
+  #   else:
+  #     gt_ill = torch.tensor([])
+
+  #   # computes histogram feature of rgb and edge images
+  #   if self.input_size is 64:
+  #     post_fix = ''
+  #   else:
+  #     post_fix = f'_{self.input_size}'
+
+  #   if path.exists(path.splitext(img_file)[0] +
+  #                  f'_histogram{post_fix}.npy') and self.load_hist:
+  #     histogram = np.load(path.splitext(img_file)[0] +
+  #                         f'_histogram{post_fix}.npy', allow_pickle=False)
+  #   else:
+  #     histogram = np.zeros((self.input_size, self.input_size, 2))
+  #     valid_chroma_rgb, valid_colors_rgb = ops.get_hist_colors(
+  #       in_img, self.from_rgb)
+  #     histogram[:, :, 0] = ops.compute_histogram(
+  #       valid_chroma_rgb, self.hist_boundary, self.input_size,
+  #       rgb_input=valid_colors_rgb)
+
+  #     edge_img = ops.compute_edges(in_img)
+  #     valid_chroma_edges, valid_colors_edges = ops.get_hist_colors(
+  #       edge_img, self.from_rgb)
+
+  #     histogram[:, :, 1] = ops.compute_histogram(
+  #       valid_chroma_edges, self.hist_boundary, self.input_size,
+  #       rgb_input=valid_colors_edges)
+
+  #     np.save(path.splitext(img_file)[0] + f'_histogram{post_fix}.npy',
+  #             histogram)
+
+  #   in_histogram = ops.to_tensor(histogram)
+
+  #   # gets additional input data
+  #   if self.additional_data_num > 0:
+  #     additiona_files = Data.get_rand_examples_from_sensor(
+  #       current_file=img_file, files=self.imgfiles,
+  #       target_number=self.additional_data_num)
+  #   else:
+  #     additiona_files = None
+
+  #   additional_histogram = histogram
+
+  #   u_coord, v_coord = ops.get_uv_coord(self.input_size,
+  #                                       tensor=False, normalize=True)
+  #   u_coord = np.expand_dims(u_coord, axis=-1)
+  #   v_coord = np.expand_dims(v_coord, axis=-1)
+
+  #   additional_histogram = np.concatenate([additional_histogram, u_coord],
+  #                                         axis=-1)
+  #   additional_histogram = np.concatenate([additional_histogram, v_coord],
+  #                                         axis=-1)
+  #   additional_histogram = np.expand_dims(additional_histogram, axis=-1)
+
+  #   # if multiple input is used, load them
+  #   if additiona_files is not None:
+  #     for file, i in zip(additiona_files, range(len(additiona_files))):
+  #       # computes histogram feature of rgb and edge images
+  #       if path.exists(path.splitext(file)[0] +
+  #                      f'_histogram{post_fix}.npy') and self.load_hist:
+  #         histogram = np.load(path.splitext(file)[0] +
+  #                             f'_histogram{post_fix}.npy', allow_pickle=False)
+
+  #       else:
+  #         img = ops.read_image(file)
+  #         h, w, _ = img.shape
+  #         if h != self.image_size[1] or w != self.image_size[0]:
+  #           img = ops.resize_image(img, self.image_size)
+  #         histogram = np.zeros((self.input_size, self.input_size, 2))
+  #         valid_chroma_rgb, valid_colors_rgb = ops.get_hist_colors(
+  #           img, self.from_rgb)
+  #         histogram[:, :, 0] = ops.compute_histogram(
+  #           valid_chroma_rgb, self.hist_boundary, self.input_size,
+  #           rgb_input=valid_colors_rgb)
+  #         edge_img = ops.compute_edges(img)
+  #         valid_chroma_edges, valid_colors_edges = ops.get_hist_colors(
+  #           edge_img, self.from_rgb)
+
+  #         histogram[:, :, 1] = ops.compute_histogram(
+  #           valid_chroma_edges, self.hist_boundary, self.input_size,
+  #           rgb_input=valid_colors_edges)
+
+  #         np.save(path.splitext(file)[0] + f'_histogram{post_fix}.npy',
+  #                 histogram)
+
+  #       histogram = np.concatenate([histogram, u_coord], axis=-1)
+  #       histogram = np.concatenate([histogram, v_coord], axis=-1)
+  #       histogram = np.expand_dims(histogram, axis=-1)
+
+  #       additional_histogram = np.concatenate([additional_histogram, histogram],
+  #                                             axis=-1)
+
+  #   additional_histogram = ops.to_tensor(additional_histogram, dims=4)
+
+  #   return {'image_rgb': rgb_img,
+  #           'file_name': path.basename(img_file),
+  #           'histogram': in_histogram,
+  #           'model_input_histograms': additional_histogram,
+  #           'gt_ill': gt_ill}
+  @timeit
   def __getitem__(self, i):
     """ Gets next data in the dataloader.
 
@@ -96,34 +238,35 @@ class Data(Dataset):
     in_img = ops.resize_image(in_img, self.image_size)
 
     rgb_img = ops.to_tensor(in_img)  # for visualization
-
     # gets the ground-truth illuminant color
-    with open(path.splitext(img_file)[
-                0] + '_metadata.json', 'r') as metadata_file:
-      metadata = json.load(metadata_file)
+    # with open(path.splitext(img_file)[
+    #             0] + '_metadata.json', 'r') as metadata_file:
+    #   metadata = json.load(metadata_file)
 
-    if self.mode == 'training':
-      assert ['illuminant_color_raw' in metadata.keys() or 'gt_ill' in
-              metadata.keys()]
-    if 'illuminant_color_raw' in metadata.keys():
-      gt_ill = np.array(metadata['illuminant_color_raw'])
-      gt_ill = torch.from_numpy(gt_ill)
-    elif 'gt_ill' in metadata.keys():
-      gt_ill = np.array(metadata['gt_ill'])
-      gt_ill = torch.from_numpy(gt_ill)
-    else:
-      gt_ill = torch.tensor([])
+    # if self.mode == 'training':
+    #   assert ['illuminant_color_raw' in metadata.keys() or 'gt_ill' in
+    #           metadata.keys()]
+    # if 'illuminant_color_raw' in metadata.keys():
+    #   gt_ill = np.array(metadata['illuminant_color_raw'])
+    #   gt_ill = torch.from_numpy(gt_ill)
+    # elif 'gt_ill' in metadata.keys():
+    #   gt_ill = np.array(metadata['gt_ill'])
+    #   gt_ill = torch.from_numpy(gt_ill)
+    # else:
+    #   gt_ill = torch.tensor([])
 
     # computes histogram feature of rgb and edge images
-    if self.input_size is 64:
+    if self.input_size == 64:
       post_fix = ''
     else:
       post_fix = f'_{self.input_size}'
+
 
     if path.exists(path.splitext(img_file)[0] +
                    f'_histogram{post_fix}.npy') and self.load_hist:
       histogram = np.load(path.splitext(img_file)[0] +
                           f'_histogram{post_fix}.npy', allow_pickle=False)
+
     else:
       histogram = np.zeros((self.input_size, self.input_size, 2))
       valid_chroma_rgb, valid_colors_rgb = ops.get_hist_colors(
@@ -142,7 +285,6 @@ class Data(Dataset):
 
       np.save(path.splitext(img_file)[0] + f'_histogram{post_fix}.npy',
               histogram)
-
     in_histogram = ops.to_tensor(histogram)
 
     # gets additional input data
@@ -150,6 +292,7 @@ class Data(Dataset):
       additiona_files = Data.get_rand_examples_from_sensor(
         current_file=img_file, files=self.imgfiles,
         target_number=self.additional_data_num)
+
     else:
       additiona_files = None
 
@@ -165,16 +308,17 @@ class Data(Dataset):
     additional_histogram = np.concatenate([additional_histogram, v_coord],
                                           axis=-1)
     additional_histogram = np.expand_dims(additional_histogram, axis=-1)
-
+    
+    start = time.time()
     # if multiple input is used, load them
     if additiona_files is not None:
       for file, i in zip(additiona_files, range(len(additiona_files))):
         # computes histogram feature of rgb and edge images
+
         if path.exists(path.splitext(file)[0] +
                        f'_histogram{post_fix}.npy') and self.load_hist:
           histogram = np.load(path.splitext(file)[0] +
                               f'_histogram{post_fix}.npy', allow_pickle=False)
-
         else:
           img = ops.read_image(file)
           h, w, _ = img.shape
@@ -196,7 +340,6 @@ class Data(Dataset):
 
           np.save(path.splitext(file)[0] + f'_histogram{post_fix}.npy',
                   histogram)
-
         histogram = np.concatenate([histogram, u_coord], axis=-1)
         histogram = np.concatenate([histogram, v_coord], axis=-1)
         histogram = np.expand_dims(histogram, axis=-1)
@@ -209,8 +352,13 @@ class Data(Dataset):
     return {'image_rgb': rgb_img,
             'file_name': path.basename(img_file),
             'histogram': in_histogram,
-            'model_input_histograms': additional_histogram,
-            'gt_ill': gt_ill}
+            'model_input_histograms': additional_histogram
+            # 'gt_ill': gt_ill
+            }
+
+
+
+
 
   @staticmethod
   def load_files(img_dir):

@@ -129,7 +129,7 @@ def test_net(net, device, dir_img, batch_size=64, input_size=64, data_num=7,
     if not os.path.exists(save_filter_dir_wb):
       if not os.path.exists('white_balanced_images'):
         os.mkdir('white_balanced_images')
-      os.mkdir(save_filter_dir_wb)
+      os.makedirs(save_filter_dir_wb, exist_ok=True)
       logging.info(f'Created visualization directory {save_filter_dir_wb}')
 
   with torch.no_grad():
@@ -275,7 +275,7 @@ if __name__ == '__main__':
       files = [os.path.join(args.in_tedir, os.path.basename(file)) for file in
                testing_files]
       test_net(net=net, device=device, dir_img=args.in_tedir,
-               cross_validation=args.cross_validation,
+               cross_validation= args.cross_validation,
                g=args.g_multiplier,
                multiple_test=args.multiple_test,
                white_balance=args.white_balance,

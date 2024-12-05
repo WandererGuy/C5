@@ -1,6 +1,6 @@
 conda activate /home/ai-ubuntu/hddnew/Manh/C5/env_2
 python capture_img.py
--> to create folder input from regular folder (images from a camera at a time in the day need white balance)
+-> preprocess, padding,  create folder input from regular folder (images from a camera at a time in the day need white balance)
 
 
 

@@ -401,6 +401,7 @@ class Encoder(nn.Module):
 
   def __init__(self, in_channel, first_conv_depth=48, max_conv_depth=32,
                data_num=7, normalization=False, norm_type='BN', depth=4):
+
     """ Encoder constructor
 
     Args:

@@ -4,14 +4,17 @@ import os.path as osp
 from tqdm import tqdm
 import logging
 
-from PIL import Image
 # Set up basic logging configuration
 # Basic logging configuration with a cleaner format
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s | %(levelname)s | %(message)s",  # Customized format
     datefmt="%Y-%m-%d %H:%M:%S"  # Timestamp format
 )
+os.makedirs("materials/preprocess", exist_ok=True)
+
+
+PADDING_COLOR = (0,0,0) 
 
 
 def make_indexed_folder(base_folder_name):
@@ -28,12 +31,6 @@ def make_indexed_folder(base_folder_name):
     return save_folder
 
 
-def jpg_to_png(source_path, destination_path):
-    # Open the JPG file
-    jpg_image = Image.open(source_path)
-
-    # Save it as PNG
-    jpg_image.save(destination_path, "PNG")
 
 
 def frame_crop(video_path, sensor_name, save_folder):
@@ -74,12 +71,50 @@ def sort_filename(folder_path):
     return sorted_files
 
 
+def remove_padding(image):
+    # image = cv2.imread(source_path)
 
-def padding(im, new_unpad, target_shape):
+    # Convert to grayscale (black padding is easy to detect in grayscale)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Threshold the image to get a binary mask (black padding is 0, other regions are 255)
+    '''
+    Any pixel value greater than 1 will be converted to 255 (white).
+    Any pixel value less than or equal to 1 will be set to 0 (black).
+
+    '''
+    _, thresh = cv2.threshold(gray, 3, 255, cv2.THRESH_BINARY)
+
+    # Find contours of the white regions in the binary mask
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    max_area = 0
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > max_area:
+            max_area = area
+            max_contour = contour
+
+    # Finds the four vertices of a straight rect. Useful to draw the rotated rectangle.
+    x, y, w, h = cv2.boundingRect(max_contour)  # Get bounding box of the contour (minimum rect)
+
+
+    '''
+    x1 ----> x2
+    |      |
+    |      |
+    |      |
+    |      v
+    x4 <---- x3
+    '''
+    cropped_image = image[int(y):int(y+h), int(x):int(x+w)]
+    
+    return cropped_image
+
+
+def padding(im, new_unpad_shape, target_shape):
     # Define the color to use for padding (a shade of gray)
-    color = (114, 114, 114) 
-    dw = target_shape[0] - new_unpad[0]  # Width padding
-    dh = target_shape[1] - new_unpad[1]  # Height padding
+    dw = target_shape[0] - new_unpad_shape[0]  # Width padding
+    dh = target_shape[1] - new_unpad_shape[1]  # Height padding
 
     # Divide the padding equally for left/right and top/bottom
     dw /= 2  
@@ -94,19 +129,17 @@ def padding(im, new_unpad, target_shape):
     # Add border (padding) to the image using the specified color
     im = cv2.copyMakeBorder(
         im, top, bottom, left, right,
-        cv2.BORDER_CONSTANT, value=color
+        cv2.BORDER_CONSTANT, value=PADDING_COLOR
     )
     logging.info("final im.shape: {}".format(im.shape))
     return im  # Return the padded image
 
-def resize_for_padđing(im):
+def resize_before_padding(im, target_width, target_height):
     logging.info("start resize while keeping aspect ratio.")
     logging.info('height, width')
     # Get original image dimensions
     original_height, original_width = im.shape[:2]
 
-    # Define target dimensions (width, height)
-    target_width, target_height = 384, 256
 
     # Calculate scaling factor to maintain aspect ratio
     scale = min(
@@ -183,10 +216,28 @@ def remove_padding(source_path):
     
     return cropped_image
 
-def padding_and_resize(cropped_image,sensor_name, save_folder, source_path, resize_enable):
+def undo_padding_and_resize(img_path, target_width, target_height, new_save_folder):
+    # undo padding
+    unpad_img = remove_padding(img_path)
+    im_ori_shape, _ , _ = resize_before_padding(unpad_img, 
+                                             target_width, 
+                                             target_height)   
+    final_img_path = os.path.join(new_save_folder, os.path.basename(img_path))
+    cv2.imwrite(final_img_path, im_ori_shape)
+    return final_img_path
+
+    # resize back to original size
+
+def resize_and_padding(cropped_image,sensor_name, save_folder, source_path, resize_enable):
+    '''
+    resize but keeping aspect ratio of image 
+    '''
     if resize_enable:
-        im, new_unpad, new_shape = resize_for_padđing(cropped_image)
-        pad_img = padding(im, new_unpad, new_shape)
+        im, new_unpad_shape, target_shape = resize_before_padding(cropped_image, 
+                                                      target_width = 384, 
+                                                      target_height = 256)
+        pad_img = padding(im, new_unpad_shape, target_shape)
+
     else: 
         pad_img = cropped_image
     filename = os.path.basename(source_path)
@@ -199,13 +250,23 @@ def padding_and_resize(cropped_image,sensor_name, save_folder, source_path, resi
     logging.info("save_path: {}".format(save_path))
 
 
-def take_and_process_frames(source_folder_path, sensor_name, save_folder, num_frequency = 4, resize_enable = True):
+def take_and_process_frames(source_folder_path, sensor_name, save_folder, num_frequency = 1, resize_enable = True):
+    original_img_shape_dict = {}
     ls = sort_filename(source_folder_path)
     for i,filename in tqdm(enumerate(ls), total=len(ls)):
         if i % num_frequency == 0:
             source_path = os.path.join(source_folder_path, filename)
-            cropped_image = remove_padding(source_path)
-            padding_and_resize(cropped_image,sensor_name, save_folder, source_path, resize_enable)
+            # cropped_image = remove_padding(source_path)
+            cropped_image = cv2.imread(source_path)
+            resize_and_padding(cropped_image,sensor_name, save_folder, source_path, resize_enable)
+
+            original_height, original_width = cropped_image.shape[:2]
+            name = os.path.basename(source_path).split('.')[:-1]
+            full_name = ''
+            for i in name:
+                full_name = full_name + i
+            original_img_shape_dict[full_name] = (original_width, original_height)
+    return original_img_shape_dict
         
 #### create every 4 frame in video into folder with name of image have sensor info 
 # # frame_crop(video_path, sensor_name, save_folder)
@@ -213,14 +274,14 @@ def take_and_process_frames(source_folder_path, sensor_name, save_folder, num_fr
 def prepare_input(source_folder_path, sensor_name, save_folder, num_frequency = 1, resize_enable = True):
     #### preprocess images +  create pseudo metadata json for a folder of images for every n_frequency  for each image
     new_save_folder = make_indexed_folder(base_folder_name  = save_folder)
-    take_and_process_frames(source_folder_path, sensor_name, new_save_folder, num_frequency = num_frequency, resize_enable = resize_enable)
+    original_img_shape_dict = take_and_process_frames(source_folder_path, sensor_name, new_save_folder, num_frequency = num_frequency, resize_enable = resize_enable)
     pseudo_groundtruth_string = '{"illuminant_color_raw":[0.70450692619758248,0.65185828786184485,0.28062566433856068]}'
     pseudo_metadata_json(pseudo_groundtruth_string, new_save_folder)
-    logging.info('Done, folder ready for testing through model: {}'.format(new_save_folder))
-
+    logging.info('FOLDER FOR INFERENCE: {}'.format(new_save_folder))
+    return original_img_shape_dict
 
 if __name__ == "__main__":
-    source_folder_path = '/home/ai-ubuntu/hddnew/Manh/GAIT_RECOG/OpenGait/demo/output/TrackingResult/di ra 03h13p/001'
-    save_folder = "/home/ai-ubuntu/hddnew/Manh/C5/materials/huong_preprocessed"
+    source_folder_path = "C:/Users/Admin/Documents/001"
+    save_folder = "materials/001_preprocessed"
     sensor_name = 'sensorname_gayy'
     prepare_input(source_folder_path, sensor_name, save_folder)

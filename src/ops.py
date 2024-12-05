@@ -21,6 +21,8 @@ import os
 from glob import glob
 from shutil import copyfile
 import itertools
+import time 
+from all_utils.utils import timeit
 
 EPS = 1e-9
 PI = 22.0 / 7.0
@@ -227,7 +229,7 @@ def from_tensor_to_image(tensor):
     image = image.transpose(1, 2, 0)
   return image
 
-
+@timeit
 def compute_histogram(chroma_input, hist_boundary, nbins, rgb_input=None):
   """ Computes log-chroma histogram of a given log-chroma values.
 
@@ -276,7 +278,7 @@ def compute_histogram(chroma_input, hist_boundary, nbins, rgb_input=None):
   N = np.sqrt(N / norm_factor)  # normalization
   return N
 
-
+@timeit
 def get_hist_colors(img, from_rgb):
   """ Gets valid chroma and color values for histogram computation.
 
@@ -428,7 +430,7 @@ def im2double(im):
     max_value = 65535
   return im.astype('float') / max_value
 
-
+@timeit
 def compute_edges(im):
   """ Computes gradient intensities of a given image; this is used to
     generate the edge histogram N_1, as described in the paper.
